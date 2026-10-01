@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         起量雷达
 // @namespace    local.qiliang-radar
-// @version      0.1.7-beta.2
+// @version      0.1.7-beta.3
 // @description  Temu竞品销量参考增量追踪
 // @match        https://www.temu.com/*
 // @run-at       document-start
@@ -34,9 +34,9 @@
     const groups = ["es", "pt"].includes(language) ? ["."] : language === "fr" ? [" ", ","] : language === "ru" ? [" "] : [","];
     let value = normalizeText(raw);
     if (abbreviated) {
-      const escaped = decimal === "." ? "\\." : ",";
+      const escaped = ["pt", "ru"].includes(language) ? "[.,]" : decimal === "." ? "\\." : ",";
       if (!new RegExp(`^(?:0|[1-9]\\d*)(?:${escaped}\\d+)?$`).test(value)) return null;
-      return Number(value.replace(decimal, "."));
+      return Number(value.replace(",", "."));
     }
     if (/^(?:0|[1-9]\d*)$/.test(value)) return Number.isSafeInteger(Number(value)) ? Number(value) : null;
     for (const separator of groups) {
@@ -54,12 +54,12 @@
     if (!config) return fail;
     const match = normalizeText(rawText).match(config.sold);
     if (!match) return fail;
-    let number = match[1].trim(), lower = false;
+    let number = (match[1] ?? match[2]).trim(), lower = false;
     if (number.endsWith("+")) {
       lower = true;
       number = number.slice(0, -1).trim();
     }
-    const unitPatterns = { en: /\s*(K|M)$/i, es: /\s*(mil|mill\.)$/i, pt: /\s*(mil|mi)$/i, fr: /\s*(k|M)$/i, ru: /\s*(тыс\.|млн)$/i, ar: /\s*(ألف|آلاف|مليون)$/, ko: /\s*(천|만)$/, "zh-Hans": /(万)$/, "zh-Hant": /(萬)$/ };
+    const unitPatterns = { en: /\s*(K|M)$/i, es: /\s*(mil|mill\.)$/i, pt: /\s*(mil|mi)$/i, fr: /\s*(k|M)$/i, ru: /\s*(тыс\.?|млн)$/i, ar: /\s*(ألف|آلاف|مليون|K|M)$/i, ko: /\s*(천|만)$/, "zh-Hans": /(万)$/, "zh-Hant": /(萬)$/ };
     const unit = number.match(unitPatterns[language]);
     let multiplier = 1;
     if (unit) {
@@ -99,12 +99,12 @@
         en: { name: "English", sold: /^(.+?)\s*sold$/i, total: /^([\d., ]+)\s*(?:items|products)\b/i, more: /^(?:See|View|Load) more(?: items| products)?$/i },
         es: { name: "Español", sold: /^(.+?)\s+vendidos?$/i, total: /^([\d., ]+)\s*(?:artículos|productos)\b/i, more: /^(?:Ver|Mostrar|Cargar) más(?: artículos| productos)?$/i },
         fr: { name: "Français", sold: /^(.+?)\s*(?:ventes?|vendu(?:s|es|e)?)$/i, total: /^([\d., ]+)\s*(?:articles|produits)\b/i, more: /^(?:Voir|Afficher) plus(?: d['’](?:articles)| de produits)?$/i },
-        pt: { name: "Português", sold: /^(.+?)\s+vendidos?$/i, total: /^([\d., ]+)\s*(?:artigos|produtos|itens)\b/i, more: /^(?:Ver|Mostrar|Carregar) mais(?: artigos| produtos| itens)?$/i },
-        ru: { name: "Русский", sold: /^Продано\s+(.+)$/i, total: /^([\d., ]+)\s*(?:товаров|товара|товар|продуктов)(?:\s|$)/i, more: /^(?:Посмотреть|Показать|Загрузить) (?:больше|ещё|еще)(?: товаров)?$/i },
-        ar: { name: "العربية", sold: /^(?:تم بيع|تمّ بيع)\s+(.+)$/, total: /^([\d., ]+)\s*(?:منتجات|منتج|سلعة|سلع)(?:\s|$)/, more: /^(?:عرض|شاهد|مشاهدة) المزيد(?: من المنتجات| من السلع)?$/ },
+        pt: { name: "Português", sold: /^(.+?)\s*vendidos?$/i, total: /^([\d., ]+)\s*(?:artigos|produtos|itens)\b/i, more: /^(?:Ver|Mostrar|Carregar) mais(?: artigos| produtos| itens)?$/i },
+        ru: { name: "Русский", sold: /^(?:Продано\s+(.+)|(.+?)\s*продано)$/i, total: /^([\d., ]+)\s*(?:товаров|товара|товары|товар|продуктов)(?:\s|$)/i, more: /^(?:Посмотреть|Показать|Загрузить) (?:больше|ещё|еще)(?: товаров)?$/i },
+        ar: { name: "العربية", sold: /^(?:تم\s*بيع|تمّ\s*بيع)\s*(.+)$/, total: /^([\d., ]+)\s*(?:منتجات|منتج(?:\(ـات\))?|سلعة|سلع)(?:\s|$)/, more: /^(?:عرض|شاهد|مشاهدة) المزيد(?: من المنتجات| من السلع)?$/ },
         ko: { name: "한국어", sold: /^(.+?)(?:개)?\s*(?:판매|판매됨|판매 완료)$/, total: /^([\d., ]+)\s*(?:개\s*)?상품/, more: /^(?:더 많은 상품 보기|상품 더 보기|더 보기)$/ },
         "zh-Hans": { name: "简体中文", sold: /^(?:已售|售出)\s*(.+?)\s*(?:件|单)$/, total: /^([\d., ]+)\s*商品/, more: /^查看更多(?:商品)?$/ },
-        "zh-Hant": { name: "繁體中文", sold: /^(?:已售|售出)\s*(.+?)\s*(?:件|單)$/, total: /^([\d., ]+)\s*商品/, more: /^查看更多(?:商品)?$/ }
+        "zh-Hant": { name: "繁體中文", sold: /^(?:已售出|已售|售出)\s*(.+?)\s*(?:件|單)$/, total: /^([\d., ]+)\s*商品/, more: /^查看更多(?:商品)?$/ }
       };
       normalizeText = (value) => String(value ?? "").normalize("NFKC").replace(/[\u200e\u200f\u061c]/g, "").replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 1776)).replace(/٬/g, ",").replace(/٫/g, ".").replace(/\s+/g, " ").trim();
     }
