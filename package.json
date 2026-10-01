@@ -1,6 +1,6 @@
 {
   "name": "qiliang-radar",
-  "version": "0.1.6",
+  "version": "0.1.7-beta.1",
   "private": true,
   "type": "module",
   "scripts": {

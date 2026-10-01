@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         起量雷达
 // @namespace    local.qiliang-radar
-// @version      0.1.6
+// @version      0.1.7-beta.1
 // @description  Temu竞品销量参考增量追踪
 // @match        https://www.temu.com/*
 // @run-at       document-start
@@ -27,10 +27,95 @@
       __defProp(target, name, { get: all[name], enumerable: true });
   };
 
+  // src/locales.mjs
+  function parseCount(raw, language, { abbreviated = false } = {}) {
+    const commaDecimal = ["es", "pt", "fr", "ru"].includes(language);
+    const decimal = commaDecimal ? "," : ".";
+    const groups = ["es", "pt"].includes(language) ? ["."] : ["fr", "ru"].includes(language) ? [" "] : [","];
+    let value = normalizeText(raw);
+    if (abbreviated) {
+      const escaped = decimal === "." ? "\\." : ",";
+      if (!new RegExp(`^(?:0|[1-9]\\d*)(?:${escaped}\\d+)?$`).test(value)) return null;
+      return Number(value.replace(decimal, "."));
+    }
+    if (/^(?:0|[1-9]\d*)$/.test(value)) return Number.isSafeInteger(Number(value)) ? Number(value) : null;
+    for (const separator of groups) {
+      const escaped = separator === "." ? "\\." : separator;
+      if (new RegExp(`^[1-9]\\d{0,2}(?:${escaped}\\d{3})+$`).test(value)) {
+        const number = Number(value.split(separator).join(""));
+        return Number.isSafeInteger(number) ? number : null;
+      }
+    }
+    return null;
+  }
+  function parseLocalizedSales(rawText, language) {
+    const fail = { ok: false, reason: "无法识别销量文本" };
+    const config = languages[language];
+    if (!config) return fail;
+    const match = normalizeText(rawText).match(config.sold);
+    if (!match) return fail;
+    let number = match[1].trim(), lower = false;
+    if (number.endsWith("+")) {
+      lower = true;
+      number = number.slice(0, -1).trim();
+    }
+    const unitPatterns = { en: /\s*(K|M)$/i, es: /\s*(mil|mill\.)$/i, pt: /\s*(mil|mi)$/i, fr: /\s*(k|M)$/i, ru: /\s*(тыс\.|млн)$/i, ar: /\s*(ألف|آلاف|مليون)$/, ko: /\s*(천|만)$/, "zh-Hans": /(万)$/, "zh-Hant": /(萬)$/ };
+    const unit = number.match(unitPatterns[language]);
+    let multiplier = 1;
+    if (unit) {
+      const key = unit[1].toLowerCase();
+      multiplier = ["m", "mill.", "mi", "млн", "مليون"].includes(key) ? 1e6 : ["万", "萬", "만"].includes(key) ? 1e4 : 1e3;
+      number = number.slice(0, unit.index).trim();
+    }
+    const count = parseCount(number, language, { abbreviated: Boolean(unit) });
+    if (count == null) return fail;
+    const value = count * multiplier;
+    if (!Number.isSafeInteger(value) || value < 0) return fail;
+    return { ok: true, value, precision: lower ? "lower_bound" : unit ? "rounded" : "number", rawText };
+  }
+  function readLocale(document2) {
+    const country = /^(?:美国|美國|United States(?: of America)?|US|USA|Estados Unidos|États-Unis|США|Соединенные Штаты|الولايات المتحدة(?: الأمريكية)?|미국)[ ,·]+/i;
+    const controls = [...document2.querySelectorAll('[role="button"][aria-label],button[aria-label]')].map((n) => normalizeText(n.getAttribute("aria-label"))).filter((label) => Object.values(languages).some((c) => label.endsWith(c.name)));
+    if (controls.length !== 1 || !country.test(controls[0])) return null;
+    const name = controls[0].replace(country, "");
+    const language = Object.keys(languages).find((key) => languages[key].name === name);
+    return language ? { market: "US", language } : null;
+  }
+  function readTotal(root, language) {
+    const values = /* @__PURE__ */ new Set();
+    for (const node of root.querySelectorAll("div,span,p,h2")) {
+      if (node.closest(".js-goods-list") || node.querySelector(".js-goods-list") || node.children.length) continue;
+      const match = normalizeText(node.textContent).match(languages[language]?.total);
+      if (!match) continue;
+      const value = parseCount(match[1].trim(), language);
+      if (value != null) values.add(value);
+    }
+    return values.size === 1 ? [...values][0] : null;
+  }
+  var languages, normalizeText;
+  var init_locales = __esm({
+    "src/locales.mjs"() {
+      languages = {
+        en: { name: "English", sold: /^(.+?)\s*sold$/i, total: /^([\d., ]+)\s*(?:items|products)\b/i, more: /^(?:See|View|Load) more(?: items| products)?$/i },
+        es: { name: "Español", sold: /^(.+?)\s+vendidos?$/i, total: /^([\d., ]+)\s*(?:artículos|productos)\b/i, more: /^(?:Ver|Mostrar|Cargar) más(?: artículos| productos)?$/i },
+        fr: { name: "Français", sold: /^(.+?)\s+vendu(?:s|es|e)?$/i, total: /^([\d., ]+)\s*(?:articles|produits)\b/i, more: /^(?:Voir|Afficher) plus(?: d['’](?:articles)| de produits)?$/i },
+        pt: { name: "Português", sold: /^(.+?)\s+vendidos?$/i, total: /^([\d., ]+)\s*(?:artigos|produtos|itens)\b/i, more: /^(?:Ver|Mostrar|Carregar) mais(?: artigos| produtos| itens)?$/i },
+        ru: { name: "Русский", sold: /^Продано\s+(.+)$/i, total: /^([\d., ]+)\s*(?:товаров|товара|товар|продуктов)(?:\s|$)/i, more: /^(?:Посмотреть|Показать|Загрузить) (?:больше|ещё|еще)(?: товаров)?$/i },
+        ar: { name: "العربية", sold: /^(?:تم بيع|تمّ بيع)\s+(.+)$/, total: /^([\d., ]+)\s*(?:منتجات|منتج|سلعة|سلع)(?:\s|$)/, more: /^(?:عرض|شاهد|مشاهدة) المزيد(?: من المنتجات| من السلع)?$/ },
+        ko: { name: "한국어", sold: /^(.+?)(?:개)?\s*(?:판매|판매됨|판매 완료)$/, total: /^([\d., ]+)\s*(?:개\s*)?상품/, more: /^(?:더 많은 상품 보기|상품 더 보기|더 보기)$/ },
+        "zh-Hans": { name: "简体中文", sold: /^(?:已售|售出)\s*(.+?)\s*(?:件|单)$/, total: /^([\d., ]+)\s*商品/, more: /^查看更多(?:商品)?$/ },
+        "zh-Hant": { name: "繁體中文", sold: /^(?:已售|售出)\s*(.+?)\s*(?:件|單)$/, total: /^([\d., ]+)\s*商品/, more: /^查看更多(?:商品)?$/ }
+      };
+      normalizeText = (value) => String(value ?? "").normalize("NFKC").replace(/[\u200e\u200f\u061c]/g, "").replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, (c) => String(c.charCodeAt(0) - 1776)).replace(/٬/g, ",").replace(/٫/g, ".").replace(/\s+/g, " ").trim();
+    }
+  });
+
   // src/core.mjs
-  function parseSales(rawText) {
+  function parseSales(rawText, language) {
     if (typeof rawText !== "string" || !rawText.trim()) return failure("销量文本为空");
     const text3 = rawText.trim();
+    if (language) return parseLocalizedSales(rawText, language);
+    if (/sold$/i.test(text3)) return parseLocalizedSales(rawText, "en");
     const match = text3.match(/^(?:已售|售出)\s*((?:0|[1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)(?:\.\d+)?)\s*(万)?\s*(\+)?\s*(?:件|单)$/);
     if (!match) return failure("无法识别销量文本");
     if (match[1].includes(".") && !match[2]) return failure("非万级销量必须是整数");
@@ -143,6 +228,7 @@
   var failure, countFrom, comparison, sameIds, detailCompatible, listCompatible, listSourceCompatible, identityKeys, hasIdentity;
   var init_core = __esm({
     "src/core.mjs"() {
+      init_locales();
       failure = (reason) => ({ ok: false, reason });
       countFrom = (value) => value && typeof value === "object" ? value.sold_quantity : value;
       comparison = (fields) => ({ ok: true, source: "none", delta: null, label: "", status: "", previousValue: null, currentValue: null, previousCapturedAt: null, currentCapturedAt: null, ...fields });
@@ -168,8 +254,8 @@
   });
   function pageProblem(document2) {
     const dialogs = [...document2.querySelectorAll('[role="dialog"]')];
-    if (dialogs.some((node) => /请完成验证|安全验证|验证码|滑块验证/.test(text(node)))) return "页面需要验证";
-    if (dialogs.some((node) => /登录后继续|请先登录/.test(text(node)))) return "页面需要登录";
+    if (dialogs.some((node) => /请完成验证|安全验证|验证码|滑块验证|verify you are human|security verification|captcha/i.test(text(node)))) return "页面需要验证";
+    if (dialogs.some((node) => /登录后继续|请先登录|sign in to continue|log in to continue/i.test(text(node)))) return "页面需要登录";
     const heading = text(document2.querySelector("h1"));
     if (/页面不存在|访问出错|Something went wrong/i.test(heading)) return "页面加载失败";
     return null;
@@ -178,10 +264,6 @@
     const anchor = document2.getElementById("mall-top-head-category-container");
     const candidate = anchor?.nextElementSibling;
     return candidate?.classList?.contains("mainContent") && candidate.querySelector(".js-goods-list") ? candidate : null;
-  }
-  function locale(document2) {
-    const labels = [...document2.querySelectorAll('[role="button"][aria-label]')].map((node) => node.getAttribute("aria-label") ?? "").filter((label) => /美国|简体中文|English/.test(label));
-    return labels.length === 1 && /美国/.test(labels[0]) && /简体中文/.test(labels[0]) ? { market: "US", language: "zh-Hans" } : null;
   }
   function readShopContext(document2, urlString) {
     const problem = pageProblem(document2);
@@ -196,8 +278,7 @@
     const root = getShopRoot(document2);
     const site = locale(document2);
     if (!shopId || !root || !site) return failure2("不支持的店铺页面结构");
-    const match = text(root).match(/([\d,]+)\s*商品/);
-    const reportedTotal = match ? Number(match[1].replaceAll(",", "")) : null;
+    const reportedTotal = readTotal(root, site.language);
     return { ok: true, ...site, shopId, shopName: text(document2.querySelector("h1")), reportedTotal: Number.isSafeInteger(reportedTotal) ? reportedTotal : null, root };
   }
   function sanitizeProductUrl(urlString, expectedGoodsId) {
@@ -214,10 +295,22 @@
     if (url.pathname === "/goods.html" && url.searchParams.get("goods_id") === expected) return `https://www.temu.com/goods.html?goods_id=${encodeURIComponent(expected)}`;
     return null;
   }
-  function uniqueSales(rawText) {
-    const pattern = /(?:已售|售出)\s*[0-9]+(?:\.[0-9]+)?(?:,[0-9]{3})*\s*万?\s*\+?\s*(?:件|单)?/g;
+  function uniqueSales(rawText, language) {
+    const direct = parseSales(rawText, language);
+    if (direct.ok) return direct;
+    const normalized = normalizeText(rawText);
+    for (let split = 1; split < normalized.length; split++) {
+      const a = normalized.slice(0, split).trim(), b = normalized.slice(split).trim();
+      if (a === b) {
+        const parsed = parseSales(a, language);
+        if (parsed.ok) return parsed;
+      }
+      if (parseSales(a, language).ok && parseSales(b, language).ok) return failure2("销量标签冲突");
+    }
+    if (language !== "zh-Hans") return failure2("销量标签含未知内容");
+    const pattern = /(?:已售|售出)\s*[0-9]+(?:\.[0-9]+)?(?:,[0-9]{3})*\s*万?\s*\+?\s*(?:件|单)?|[0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?\s*[KM]?\s*\+?\s*sold/gi;
     const matches = rawText.match(pattern) ?? [];
-    const unique = [...new Set(matches.map((value) => value.replace(/\s/g, "")))];
+    const unique = [...new Set(matches.map((value) => value.trim().replace(/\s+/g, " ")))];
     if (unique.length > 1) return failure2("销量标签冲突");
     if (!unique.length) return failure2("无法识别销量文本");
     if (rawText.replace(pattern, "").trim()) return failure2("销量标签含未知内容");
@@ -239,7 +332,7 @@
       seen.add(goodsId);
       seenGoodsIds.push(goodsId);
       const rawSales = text(node.querySelector('[data-type="saleTips"]'));
-      const sale = rawSales.trim() ? uniqueSales(rawSales) : failure2("未展示销量");
+      const sale = rawSales.trim() ? uniqueSales(rawSales, context.language) : failure2("未展示销量");
       if (!sale.ok) {
         errors.push({ goodsId, reason: sale.reason });
         continue;
@@ -257,7 +350,7 @@
       }
       cards.push({ goodsId, title: node.getAttribute("data-tooltip-title") ?? "", productUrl, navigationUrl, list: { capturedAt: (/* @__PURE__ */ new Date()).toISOString(), rawText: sale.rawText, value: sale.value, precision: sale.precision, metricVersion: "shop-sales-v1" } });
     }
-    const moreButton = [...context.root.querySelectorAll('[role="button"][aria-label="查看更多商品"]')][0] ?? null;
+    const moreButton = [...context.root.querySelectorAll('[role="button"],button')].find((node) => languages[context.language]?.more.test(normalizeText(node.getAttribute("aria-label") || text(node)))) ?? null;
     return { ok: true, cards, errors, seenGoodsIds, hasMore: Boolean(moreButton), moreButton, reportedTotal: context.reportedTotal };
   }
   function extractObjects(source) {
@@ -364,13 +457,15 @@
     const display = store?.goods?.soldQuantity;
     return { ok: true, goodsId, detail: { capturedAt: (/* @__PURE__ */ new Date()).toISOString(), skuTotal: checked.skuTotal, skuIds: checked.skuIds, skuCounts: checked.skuCounts, goodsDisplayValue: Number.isSafeInteger(display) ? display : null, metricVersion: "sku-sold-quantity-v1", adapterVersion: "temu-detail-v1" } };
   }
-  var failure2, text, stringId;
+  var failure2, text, stringId, locale;
   var init_adapters = __esm({
     "src/adapters.mjs"() {
+      init_locales();
       init_core();
       failure2 = (reason, extra = {}) => ({ ok: false, reason, ...extra });
       text = (node) => node?.textContent?.trim() ?? "";
       stringId = (value) => typeof value === "string" || Number.isSafeInteger(value) ? String(value) : null;
+      locale = readLocale;
     }
   });
 
@@ -1324,6 +1419,7 @@
     return toCsv(rows.map((row) => ({
       日期: day,
       站点: context.market,
+      页面语言: context.language,
       店铺ID: context.shopId,
       店铺名称: row.shopName,
       商品ID: `‌${row.goodsId}`,
@@ -1361,7 +1457,7 @@
     header.append(titleWrap, fold);
     panel.append(header);
     const content = element(document2, "div");
-    content.append(element(document2, "div", `${context.shopName || context.shopId} · ${context.market} · ${initialDay}`));
+    content.append(element(document2, "div", `${context.shopName || context.shopId} · ${context.market} · ${context.language} · ${initialDay}`));
     const controls = element(document2, "div", null, "controls");
     const threshold = element(document2, "input");
     threshold.type = "number";

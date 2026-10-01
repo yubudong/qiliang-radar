@@ -136,7 +136,7 @@ const metricText=v=>v==null?'数据不足':`约 ${Number(v.toFixed(1))}`;
 function trendDisplays(t={}) {return [metricText(t.average),t.streak==null?'数据不足':`${t.streakIncomplete?'至少 ':''}${t.streak}`,metricText(t.acceleration),t.firstSeen??'数据不足'];}
 export function rowsToCsv(rows, day, context) {
   return toCsv(rows.map((row) => ({
-    日期:day, 站点:context.market, 店铺ID:context.shopId, 店铺名称:row.shopName,
+    日期:day, 站点:context.market, 页面语言:context.language, 店铺ID:context.shopId, 店铺名称:row.shopName,
     商品ID:`\u200c${row.goodsId}`, 商品名称:row.title, 商品链接:row.productUrl,
     昨日原文:row.comparison.source === 'list' ? (row.previousDisplay || '') : '',
     今日原文:row.list?.rawText ?? '', 昨日比较值:row.comparison.previousValue,
@@ -153,7 +153,7 @@ export function mountPanel({ document, context, storage, runtime, initialDay, co
   const panel=element(document,'section',null,'panel'); const header=element(document,'header');
   const titleWrap=element(document,'div'); titleWrap.append(element(document,'strong','起量雷达'),element(document,'div','Temu竞品销量追踪助手'));
   const fold=element(document,'button','折叠'); header.append(titleWrap,fold); panel.append(header);
-  const content=element(document,'div'); content.append(element(document,'div',`${context.shopName || context.shopId} · ${context.market} · ${initialDay}`)); const controls=element(document,'div',null,'controls');
+  const content=element(document,'div'); content.append(element(document,'div',`${context.shopName || context.shopId} · ${context.market} · ${context.language} · ${initialDay}`)); const controls=element(document,'div',null,'controls');
   const threshold=element(document,'input'); threshold.type='number'; threshold.min='0'; threshold.value='20'; threshold.title='最低累计销量';
   const day=element(document,'input'); day.type='date'; day.value=initialDay;
   const filter=element(document,'select'); for (const value of ['全部','新星','新收录','需复核']) { const option=element(document,'option',value); option.value=value; filter.append(option); }

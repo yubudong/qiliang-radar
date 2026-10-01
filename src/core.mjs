@@ -1,8 +1,11 @@
+import {parseLocalizedSales} from './locales.mjs';
 const failure = (reason) => ({ ok: false, reason });
 
-export function parseSales(rawText) {
+export function parseSales(rawText, language) {
   if (typeof rawText !== 'string' || !rawText.trim()) return failure('销量文本为空');
   const text = rawText.trim();
+  if(language)return parseLocalizedSales(rawText,language);
+  if(/sold$/i.test(text))return parseLocalizedSales(rawText,'en');
   const match = text.match(/^(?:已售|售出)\s*((?:0|[1-9]\d{0,2}(?:,\d{3})+|[1-9]\d*)(?:\.\d+)?)\s*(万)?\s*(\+)?\s*(?:件|单)$/);
   if (!match) return failure('无法识别销量文本');
   if (match[1].includes('.') && !match[2]) return failure('非万级销量必须是整数');

@@ -3,7 +3,7 @@ import { build } from 'esbuild';
 const metadata=`// ==UserScript==
 // @name         起量雷达
 // @namespace    local.qiliang-radar
-// @version      0.1.6
+// @version      0.1.7-beta.1
 // @description  Temu竞品销量参考增量追踪
 // @match        https://www.temu.com/*
 // @run-at       document-start

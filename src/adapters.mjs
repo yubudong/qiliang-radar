@@ -1,3 +1,4 @@
+import {languages,normalizeText,readLocale,readTotal} from './locales.mjs';
 import { parseSales, validateSkuSales } from './core.mjs';
 
 const failure = (reason, extra = {}) => ({ ok:false, reason, ...extra });
@@ -6,8 +7,8 @@ const stringId = (value) => (typeof value === 'string' || Number.isSafeInteger(v
 
 export function pageProblem(document) {
   const dialogs = [...document.querySelectorAll('[role="dialog"]')];
-  if (dialogs.some((node) => /请完成验证|安全验证|验证码|滑块验证/.test(text(node)))) return '页面需要验证';
-  if (dialogs.some((node) => /登录后继续|请先登录/.test(text(node)))) return '页面需要登录';
+  if (dialogs.some((node) => /请完成验证|安全验证|验证码|滑块验证|verify you are human|security verification|captcha/i.test(text(node)))) return '页面需要验证';
+  if (dialogs.some((node) => /登录后继续|请先登录|sign in to continue|log in to continue/i.test(text(node)))) return '页面需要登录';
   const heading = text(document.querySelector('h1'));
   if (/页面不存在|访问出错|Something went wrong/i.test(heading)) return '页面加载失败';
   return null;
@@ -19,13 +20,7 @@ export function getShopRoot(document) {
   return candidate?.classList?.contains('mainContent') && candidate.querySelector('.js-goods-list') ? candidate : null;
 }
 
-function locale(document) {
-  const labels = [...document.querySelectorAll('[role="button"][aria-label]')]
-    .map((node) => node.getAttribute('aria-label') ?? '')
-    .filter((label) => /美国|简体中文|English/.test(label));
-  return labels.length === 1 && /美国/.test(labels[0]) && /简体中文/.test(labels[0])
-    ? {market:'US',language:'zh-Hans'} : null;
-}
+const locale = readLocale;
 
 export function readShopContext(document, urlString) {
   const problem = pageProblem(document);
@@ -36,8 +31,7 @@ export function readShopContext(document, urlString) {
   const root = getShopRoot(document);
   const site = locale(document);
   if (!shopId || !root || !site) return failure('不支持的店铺页面结构');
-  const match = text(root).match(/([\d,]+)\s*商品/);
-  const reportedTotal = match ? Number(match[1].replaceAll(',','')) : null;
+  const reportedTotal = readTotal(root,site.language);
   return {ok:true,...site,shopId,shopName:text(document.querySelector('h1')),reportedTotal:Number.isSafeInteger(reportedTotal)?reportedTotal:null,root};
 }
 
@@ -52,10 +46,19 @@ export function sanitizeProductUrl(urlString, expectedGoodsId) {
   return null;
 }
 
-function uniqueSales(rawText) {
-  const pattern = /(?:已售|售出)\s*[0-9]+(?:\.[0-9]+)?(?:,[0-9]{3})*\s*万?\s*\+?\s*(?:件|单)?/g;
+function uniqueSales(rawText,language) {
+  const direct=parseSales(rawText,language);
+  if(direct.ok)return direct;
+  const normalized=normalizeText(rawText);
+  for(let split=1;split<normalized.length;split++){
+    const a=normalized.slice(0,split).trim(),b=normalized.slice(split).trim();
+    if(a===b){const parsed=parseSales(a,language);if(parsed.ok)return parsed;}
+    if(parseSales(a,language).ok&&parseSales(b,language).ok)return failure('销量标签冲突');
+  }
+  if(language!=='zh-Hans')return failure('销量标签含未知内容');
+  const pattern = /(?:已售|售出)\s*[0-9]+(?:\.[0-9]+)?(?:,[0-9]{3})*\s*万?\s*\+?\s*(?:件|单)?|[0-9]+(?:,[0-9]{3})*(?:\.[0-9]+)?\s*[KM]?\s*\+?\s*sold/gi;
   const matches = rawText.match(pattern) ?? [];
-  const unique = [...new Set(matches.map((value) => value.replace(/\s/g,'')))];
+  const unique = [...new Set(matches.map((value) => value.trim().replace(/\s+/g,' ')))];
   if (unique.length > 1) return failure('销量标签冲突');
   if (!unique.length) return failure('无法识别销量文本');
   if (rawText.replace(pattern, '').trim()) return failure('销量标签含未知内容');
@@ -71,7 +74,7 @@ export function readShopCards(document, context, urlString) {
     if (!goodsId || seen.has(goodsId)) continue;
     seen.add(goodsId); seenGoodsIds.push(goodsId);
     const rawSales=text(node.querySelector('[data-type="saleTips"]'));
-    const sale = rawSales.trim() ? uniqueSales(rawSales) : failure('未展示销量');
+    const sale = rawSales.trim() ? uniqueSales(rawSales,context.language) : failure('未展示销量');
     if (!sale.ok) { errors.push({goodsId,reason:sale.reason}); continue; }
     const href = node.querySelector('a[href]')?.getAttribute('href');
     let navigationUrl = null;
@@ -80,7 +83,7 @@ export function readShopCards(document, context, urlString) {
     if (!productUrl) { errors.push({goodsId,reason:'商品链接无法校验'}); continue; }
     cards.push({goodsId,title:node.getAttribute('data-tooltip-title') ?? '',productUrl,navigationUrl,list:{capturedAt:new Date().toISOString(),rawText:sale.rawText,value:sale.value,precision:sale.precision,metricVersion:'shop-sales-v1'}});
   }
-  const moreButton = [...context.root.querySelectorAll('[role="button"][aria-label="查看更多商品"]')][0] ?? null;
+  const moreButton = [...context.root.querySelectorAll('[role="button"],button')].find(node=>languages[context.language]?.more.test(normalizeText(node.getAttribute('aria-label') || text(node)))) ?? null;
   return {ok:true,cards,errors,seenGoodsIds,hasMore:Boolean(moreButton),moreButton,reportedTotal:context.reportedTotal};
 }
 
