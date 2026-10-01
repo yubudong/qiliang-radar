@@ -1,0 +1,22 @@
+{
+  "goodsId": "606196396351614",
+  "skuSum": 11285,
+  "rows": [
+    {"goodsId":"606196396351614","skuId":"99537075099635","sold_quantity":922},
+    {"goodsId":"606196396351614","skuId":"100552029554005","sold_quantity":134},
+    {"goodsId":"606196396351614","skuId":"100552029559125","sold_quantity":217},
+    {"goodsId":"606196396351614","skuId":"100552029567317","sold_quantity":277},
+    {"goodsId":"606196396351614","skuId":"99537075058675","sold_quantity":956},
+    {"goodsId":"606196396351614","skuId":"100552029504853","sold_quantity":353},
+    {"goodsId":"606196396351614","skuId":"100552029513045","sold_quantity":230},
+    {"goodsId":"606196396351614","skuId":"100552029518165","sold_quantity":199},
+    {"goodsId":"606196396351614","skuId":"99537075091443","sold_quantity":1485},
+    {"goodsId":"606196396351614","skuId":"100552029537621","sold_quantity":561},
+    {"goodsId":"606196396351614","skuId":"100552029545813","sold_quantity":393},
+    {"goodsId":"606196396351614","skuId":"100552029550933","sold_quantity":337},
+    {"goodsId":"606196396351614","skuId":"99537075075059","sold_quantity":2614},
+    {"goodsId":"606196396351614","skuId":"100552029521237","sold_quantity":1122},
+    {"goodsId":"606196396351614","skuId":"100552029529429","sold_quantity":803},
+    {"goodsId":"606196396351614","skuId":"100552029534549","sold_quantity":682}
+  ]
+}
