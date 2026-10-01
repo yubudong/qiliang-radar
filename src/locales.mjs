@@ -2,7 +2,7 @@
 export const languages = {
  en:{name:'English',sold:/^(.+?)\s*sold$/i,total:/^([\d., ]+)\s*(?:items|products)\b/i,more:/^(?:See|View|Load) more(?: items| products)?$/i},
  es:{name:'Español',sold:/^(.+?)\s+vendidos?$/i,total:/^([\d., ]+)\s*(?:artículos|productos)\b/i,more:/^(?:Ver|Mostrar|Cargar) más(?: artículos| productos)?$/i},
- fr:{name:'Français',sold:/^(.+?)\s+vendu(?:s|es|e)?$/i,total:/^([\d., ]+)\s*(?:articles|produits)\b/i,more:/^(?:Voir|Afficher) plus(?: d['’](?:articles)| de produits)?$/i},
+ fr:{name:'Français',sold:/^(.+?)\s*(?:ventes?|vendu(?:s|es|e)?)$/i,total:/^([\d., ]+)\s*(?:articles|produits)\b/i,more:/^(?:Voir|Afficher) plus(?: d['’](?:articles)| de produits)?$/i},
  pt:{name:'Português',sold:/^(.+?)\s+vendidos?$/i,total:/^([\d., ]+)\s*(?:artigos|produtos|itens)\b/i,more:/^(?:Ver|Mostrar|Carregar) mais(?: artigos| produtos| itens)?$/i},
  ru:{name:'Русский',sold:/^Продано\s+(.+)$/i,total:/^([\d., ]+)\s*(?:товаров|товара|товар|продуктов)(?:\s|$)/i,more:/^(?:Посмотреть|Показать|Загрузить) (?:больше|ещё|еще)(?: товаров)?$/i},
  ar:{name:'العربية',sold:/^(?:تم بيع|تمّ بيع)\s+(.+)$/,total:/^([\d., ]+)\s*(?:منتجات|منتج|سلعة|سلع)(?:\s|$)/,more:/^(?:عرض|شاهد|مشاهدة) المزيد(?: من المنتجات| من السلع)?$/},
@@ -14,7 +14,7 @@ export const normalizeText = value => String(value??'').normalize('NFKC').replac
 export function parseCount(raw,language,{abbreviated=false}={}) {
  const commaDecimal=['es','pt','fr','ru'].includes(language);
  const decimal=commaDecimal?',':'.';
- const groups=['es','pt'].includes(language)?['.']:['fr','ru'].includes(language)?[' ']:[','];
+ const groups=['es','pt'].includes(language)?['.']:language==='fr'?[' ',',']:language==='ru'?[' ']:[','];
  let value=normalizeText(raw);
  // Decimal marks are accepted only with an explicit compact unit.
  if(abbreviated){
