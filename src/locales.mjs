@@ -1,7 +1,7 @@
 // Language contracts are conservative: unknown wording remains an explicit parse failure.
 export const languages = {
  en:{name:'English',sold:/^(.+?)\s*sold$/i,total:/^([\d., ]+)\s*(?:items|products)\b/i,more:/^(?:See|View|Load) more(?: items| products)?$/i},
- es:{name:'Español',sold:/^(.+?)\s+vendidos?$/i,total:/^([\d., ]+)\s*(?:artículos|productos)\b/i,more:/^(?:Ver|Mostrar|Cargar) más(?: artículos| productos)?$/i},
+ es:{name:'Español',sold:/^(.+?)\s*(?:ventas?|vendidos?)$/i,total:/^([\d., ]+)\s*(?:artículos|productos)\b/i,more:/^(?:Ver|Mostrar|Cargar) más(?: artículos| productos)?$/i},
  fr:{name:'Français',sold:/^(.+?)\s*(?:ventes?|vendu(?:s|es|e)?)$/i,total:/^([\d., ]+)\s*(?:articles|produits)\b/i,more:/^(?:Voir|Afficher) plus(?: d['’](?:articles)| de produits)?$/i},
  pt:{name:'Português',sold:/^(.+?)\s*vendidos?$/i,total:/^([\d., ]+)\s*(?:artigos|produtos|itens)\b/i,more:/^(?:Ver|Mostrar|Carregar) mais(?: artigos| produtos| itens)?$/i},
  ru:{name:'Русский',sold:/^(?:Продано\s+(.+)|(.+?)\s*продано)$/i,total:/^([\d., ]+)\s*(?:товаров|товара|товары|товар|продуктов)(?:\s|$)/i,more:/^(?:Посмотреть|Показать|Загрузить) (?:больше|ещё|еще)(?: товаров)?$/i},
@@ -18,7 +18,7 @@ export function parseCount(raw,language,{abbreviated=false}={}) {
  let value=normalizeText(raw);
  // Decimal marks are accepted only with an explicit compact unit.
  if(abbreviated){
-  const escaped=['pt','ru'].includes(language)?'[.,]':decimal==='.'?'\\.':',';
+  const escaped=['es','pt','ru'].includes(language)?'[.,]':decimal==='.'?'\\.':',';
   if(!new RegExp(`^(?:0|[1-9]\\d*)(?:${escaped}\\d+)?$`).test(value))return null;
   return Number(value.replace(',','.'));
  }
@@ -37,7 +37,7 @@ export function parseLocalizedSales(rawText, language) {
  const match=normalizeText(rawText).match(config.sold);if(!match)return fail;
  let number=(match[1]??match[2]).trim(),lower=false;
  if(number.endsWith('+')){lower=true;number=number.slice(0,-1).trim();}
- const unitPatterns={en:/\s*(K|M)$/i,es:/\s*(mil|mill\.)$/i,pt:/\s*(mil|mi)$/i,fr:/\s*(k|M)$/i,ru:/\s*(тыс\.?|млн)$/i,ar:/\s*(ألف|آلاف|مليون|K|M)$/i,ko:/\s*(천|만)$/, 'zh-Hans':/(万)$/,'zh-Hant':/(萬)$/};
+ const unitPatterns={en:/\s*(K|M)$/i,es:/\s*(mil|mill\.|K|M)$/i,pt:/\s*(mil|mi)$/i,fr:/\s*(k|M)$/i,ru:/\s*(тыс\.?|млн)$/i,ar:/\s*(ألف|آلاف|مليون|K|M)$/i,ko:/\s*(천|만)$/, 'zh-Hans':/(万)$/,'zh-Hant':/(萬)$/};
  const unit=number.match(unitPatterns[language]);let multiplier=1;
  if(unit){
   const key=unit[1].toLowerCase();multiplier=['m','mill.','mi','млн','مليون'].includes(key)?1e6:['万','萬','만'].includes(key)?1e4:1e3;
